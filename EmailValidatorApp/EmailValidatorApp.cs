@@ -112,23 +112,27 @@ namespace EmailValidator
         private readonly IEmailRepository emailRepository;
         private readonly List<IValidationStrategy> validationStrategies;
 
-        public EmailValidatorApp(IEmailRepository emailRepository, List<IValidationStrategy> customValidationStrategies = null)
+        public EmailValidatorApp(IEmailRepository emailRepository)
         {
             this.emailRepository = emailRepository;
-            this.validationStrategies = new List<IValidationStrategy>
+            this.validationStrategies = new List<IValidationStrategy>{  new EmailFormatValidationStrategy(),
+                                                                        new EmailPartLengthValidationStrategy(),
+                                                                        new EmailCharactersValidationStrategy(),
+                                                                        new NoDuplicateEmailsValidationStrategy(emailRepository)};
+        }
+        public EmailValidatorApp(List<IValidationStrategy> validationStrategies)
         {
-            new EmailFormatValidationStrategy(),
-            new EmailPartLengthValidationStrategy(),
-            new EmailCharactersValidationStrategy()
-        };
-            if (emailRepository != null)
-            {
-                this.validationStrategies.Add(new NoDuplicateEmailsValidationStrategy(emailRepository));
-            }
-            if (customValidationStrategies != null)
-            {
-                this.validationStrategies.AddRange(customValidationStrategies);
-            }
+            this.validationStrategies = validationStrategies;
+        }
+        public EmailValidatorApp(IEmailRepository emailRepository, List<IValidationStrategy> validationStrategies) : this(emailRepository)
+        {
+            this.validationStrategies = validationStrategies;
+        }
+        public EmailValidatorApp()
+        {
+            this.validationStrategies = new List<IValidationStrategy> { new EmailFormatValidationStrategy(), 
+                                                                        new EmailPartLengthValidationStrategy(), 
+                                                                        new EmailCharactersValidationStrategy()};
         }
         public bool ValidateEmail(string email)
         {
