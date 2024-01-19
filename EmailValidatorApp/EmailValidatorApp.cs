@@ -6,67 +6,23 @@ namespace EmailValidator
     {
         bool EmailExists(string email);
     }
-
-    public class EmailValidatorApp
+    public interface IValidationStrategy
     {
-        private readonly IEmailRepository emailRepository;
-        public EmailValidatorApp(){  }
-        public EmailValidatorApp(IEmailRepository emailRepository)
-        {
-            this.emailRepository = emailRepository;
-        }
-        public bool ValidateEmail (string email)
-        {
-            if (emailRepository != null && emailRepository.EmailExists(email))
-                return false;
-            if (!ValidateEmailFormat(email))
-                return false;
-            if (!ValidateEmailPartLength(email))
-                return false;
-            if(!ValidateEmailCharacters(email)) 
-                return false;
-            return true;
-        }
-        public bool ValidateEmailFormat(string email)
-        {
-            int atIndex = getAtIndex(email);
-            if (atIndex == -1)
-                return false;
-            int dotIndex = getDotIndex(email, atIndex);
-            if (dotIndex == -1 || dotIndex <= atIndex + 1)
-                return false;
-            if (atIndex == 0 || dotIndex == email.Length - 1)
-                return false;
-            return true;
-        }
-        private int getAtIndex(string email)
+        bool Validate(string email);
+    }
+    public static class ValidatorUtility
+    {
+        public static int getAtIndex(string email)
         {
             int atIndex = email.IndexOf('@');
             return atIndex;
         }
-        private int getDotIndex(string email, int atIndex)
+        public static int getDotIndex(string email, int atIndex)
         {
             int dotIndex = email.IndexOf('.', atIndex);
             return dotIndex;
         }
-        public bool ValidateEmailPartLength(string email)
-        {
-            string firstPart = GetEmailPart(email, 1);
-            string secondPart = GetEmailPart(email, 2);
-            string thirdPart = GetEmailPart(email, 3);
-            
-            bool isFirstPartValid = IsValidPartLength(firstPart, 5, 15);
-            bool isSecondPartValid = IsValidPartLength(secondPart, 5, 10);
-            bool isThirdPartValid = IsValidPartLength(thirdPart, 2, 5);
-            
-            return isFirstPartValid && isSecondPartValid && isThirdPartValid;
-        }
-        private bool IsValidPartLength(string part, int minLength, int maxLength)
-        {
-            int partLength = part.Length;
-            return partLength >= minLength && partLength <= maxLength;
-        }
-        private string GetEmailPart(string email, int partToGet)
+        public static string GetEmailPart(string email, int partToGet)
         {
             int atIndex = getAtIndex(email);
             int dotIndex = getDotIndex(email, atIndex);
@@ -77,15 +33,68 @@ namespace EmailValidator
             else
                 return email.Substring(dotIndex + 1);
         }
-        public bool ValidateEmailCharacters(string email) 
+    }
+    public class NoDuplicateEmailsValidationStrategy : IValidationStrategy
+    {
+        private readonly IEmailRepository _emailRepository;
+        public NoDuplicateEmailsValidationStrategy(IEmailRepository emailRepository)
         {
-            string firstPart = GetEmailPart(email, 1);
-            string secondPart = GetEmailPart(email, 2);
-            string thirdPart = GetEmailPart(email, 3);
+            _emailRepository = emailRepository;
+        }
+        public bool Validate(string email) 
+        {
+            if(_emailRepository.EmailExists(email))
+                return false;
+            else 
+                return true;
+        }
+    }
+    public class EmailFormatValidationStrategy : IValidationStrategy
+    {
+        public bool Validate(string email)
+        {
+            int atIndex = ValidatorUtility.getAtIndex(email);
+            if (atIndex == -1)
+                return false;
+            int dotIndex = ValidatorUtility.getDotIndex(email, atIndex);
+            if (dotIndex == -1 || dotIndex <= atIndex + 1)
+                return false;
+            if (atIndex == 0 || dotIndex == email.Length - 1)
+                return false;
+            return true;
+        }
+    }
+    public class EmailPartLengthValidationStrategy : IValidationStrategy
+    {
+        public bool Validate(string email)
+        {
+            string firstPart = ValidatorUtility.GetEmailPart(email, 1);
+            string secondPart = ValidatorUtility.GetEmailPart(email, 2);
+            string thirdPart = ValidatorUtility.GetEmailPart(email, 3);
+
+            bool isFirstPartValid = IsValidPartLength(firstPart, 5, 15);
+            bool isSecondPartValid = IsValidPartLength(secondPart, 5, 10);
+            bool isThirdPartValid = IsValidPartLength(thirdPart, 2, 5);
+
+            return isFirstPartValid && isSecondPartValid && isThirdPartValid;
+        }
+        private bool IsValidPartLength(string part, int minLength, int maxLength)
+        {
+            int partLength = part.Length;
+            return partLength >= minLength && partLength <= maxLength;
+        }
+    }
+    public class EmailCharactersValidationStrategy : IValidationStrategy
+    {
+        public bool Validate(string email)
+        {
+            string firstPart = ValidatorUtility.GetEmailPart(email, 1);
+            string secondPart = ValidatorUtility.GetEmailPart(email, 2);
+            string thirdPart = ValidatorUtility.GetEmailPart(email, 3);
 
             return ValidatePartCharacters(firstPart) &&
-                   ValidatePartCharacters(secondPart) &&
-                   ValidatePartCharacters(thirdPart);
+                    ValidatePartCharacters(secondPart) &&
+                    ValidatePartCharacters(thirdPart);
         }
         private bool ValidatePartCharacters(string part)
         {
@@ -96,9 +105,34 @@ namespace EmailValidator
             if (part.Any(ch => !char.IsLetterOrDigit(ch)))
                 return false;
             return true;
-
         }
+    }
+    public class EmailValidatorApp
+    {
+        private readonly IEmailRepository emailRepository;
+        private readonly List<IValidationStrategy> validationStrategies;
 
-
+        public EmailValidatorApp(IEmailRepository emailRepository, List<IValidationStrategy> customValidationStrategies = null)
+        {
+            this.emailRepository = emailRepository;
+            this.validationStrategies = new List<IValidationStrategy>
+        {
+            new EmailFormatValidationStrategy(),
+            new EmailPartLengthValidationStrategy(),
+            new EmailCharactersValidationStrategy()
+        };
+            if (emailRepository != null)
+            {
+                this.validationStrategies.Add(new NoDuplicateEmailsValidationStrategy(emailRepository));
+            }
+            if (customValidationStrategies != null)
+            {
+                this.validationStrategies.AddRange(customValidationStrategies);
+            }
+        }
+        public bool ValidateEmail(string email)
+        {
+            return validationStrategies.All(strategy => strategy.Validate(email));
+        }
     }
 }
